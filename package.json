@@ -1,0 +1,28 @@
+{
+  "name": "workspace",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "artifacts/civicforge",
+    "artifacts/api-server",
+    "lib/*",
+    "scripts"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@workspace/civicforge",
+    "build": "npm run build --workspace=@workspace/civicforge",
+    "typecheck:libs": "tsc --build",
+    "typecheck": "npm run typecheck:libs && npm run typecheck --workspace=@workspace/civicforge",
+    "lint": "npm run typecheck"
+  },
+  "devDependencies": {
+    "@types/leaflet": "^1.9.22",
+    "prettier": "^3.9.6",
+    "typescript": "~5.9.3"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.115.0",
+    "leaflet": "^1.9.4"
+  }
+}

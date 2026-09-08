@@ -1,0 +1,6 @@
+{
+  "name": "JANSAMVAD AI",
+  "description": "AI-Powered Civic Grievance Intelligence & Resolution Platform for Jharkhand",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
