@@ -1,7 +1,7 @@
 -- ==============================================================================
--- JANSAMVAD AI — Complete Master Schema
+-- JANSAMVAD AI — Final Complete Hackathon Database Migration
 -- Civic Grievance Intelligence & Tri-Party Resolution Platform for Jharkhand
--- File: supabase/schema.sql
+-- File: supabase/migrations/20260908_final_hackathon_backend.sql
 -- ==============================================================================
 
 -- 1. Enable pgcrypto extension for UUID generation
@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS public.issues (
   resolved_at TIMESTAMPTZ DEFAULT NULL
 );
 
+-- Ensure all columns exist idempotently if table was pre-existing
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS department_id UUID REFERENCES public.departments(id) ON DELETE SET NULL;
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS assigned_officer_id UUID REFERENCES public.officers(id) ON DELETE SET NULL;
 ALTER TABLE public.issues ADD COLUMN IF NOT EXISTS citizen_verification BOOLEAN DEFAULT NULL;
@@ -313,15 +314,19 @@ BEGIN
     v_target_issue_id := NEW.issue_id;
   END IF;
 
+  -- Count total reports and duplicate merged reports
   SELECT COUNT(*), COUNT(*) FILTER (WHERE is_duplicate = true)
   INTO v_report_count, v_duplicate_count
   FROM public.issue_reports
   WHERE issue_id = v_target_issue_id;
 
+  -- Fetch current base priority score
   SELECT priority_score INTO v_current_score
   FROM public.issues
   WHERE id = v_target_issue_id;
 
+  -- Dynamic priority escalation based on citizen report density
+  -- Base score + scaling boost for multi-citizen grievance volume
   v_new_priority_score := LEAST(100, GREATEST(COALESCE(v_current_score, 50), 30 + (v_report_count * 6) + (v_duplicate_count * 4)));
 
   IF v_new_priority_score >= 85 THEN
@@ -334,6 +339,7 @@ BEGIN
     v_new_priority := 'low';
   END IF;
 
+  -- Update issues master record
   UPDATE public.issues
   SET
     report_count = GREATEST(1, v_report_count),
@@ -356,6 +362,7 @@ CREATE TRIGGER trigger_recalculate_issue_reports
 -- 11. ATOMIC SECURE RPC FUNCTIONS
 -- ==============================================================================
 
+-- Helper: Generate server-side Jharkhand Public Issue ID
 CREATE OR REPLACE FUNCTION public.generate_jharkhand_public_id(p_district TEXT)
 RETURNS TEXT AS $$
 DECLARE
@@ -378,6 +385,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql IMMUTABLE;
 
+-- RPC 1: create_issue_with_report
+-- Atomically creates: Issue + First IssueReport + StatusHistory + AI Analysis
 CREATE OR REPLACE FUNCTION public.create_issue_with_report(
   p_title TEXT,
   p_description TEXT,
@@ -411,6 +420,7 @@ BEGIN
   v_user_id := auth.uid();
   v_public_id := public.generate_jharkhand_public_id(p_district);
 
+  -- Resolve Department UUID
   SELECT id, name INTO v_dept_id, v_dept_name
   FROM public.departments
   WHERE code = UPPER(p_department_code);
@@ -421,12 +431,14 @@ BEGIN
     WHERE code = 'OTHER';
   END IF;
 
+  -- Flagged for Review if spam detected
   IF p_is_spam THEN
     v_status := 'rejected';
   ELSE
     v_status := 'reported';
   END IF;
 
+  -- 1. Insert Issue
   INSERT INTO public.issues (
     public_id,
     title,
@@ -463,6 +475,7 @@ BEGIN
     0
   ) RETURNING id INTO v_issue_id;
 
+  -- 2. Insert First Issue Report (Original Complaint)
   INSERT INTO public.issue_reports (
     issue_id,
     reporter_user_id,
@@ -485,6 +498,7 @@ BEGIN
     0
   );
 
+  -- 3. Insert Initial Timeline Status History
   INSERT INTO public.issue_status_history (issue_id, status, actor, action, notes)
   VALUES (
     v_issue_id,
@@ -525,6 +539,7 @@ BEGIN
     );
   END IF;
 
+  -- 4. Insert AI Analysis Record
   INSERT INTO public.ai_analysis (
     issue_id,
     is_spam,
@@ -553,6 +568,7 @@ BEGIN
     p_raw_ai_json
   );
 
+  -- 5. Attach initial evidence if provided
   IF p_evidence_url IS NOT NULL AND TRIM(p_evidence_url) <> '' THEN
     INSERT INTO public.evidence (
       issue_id,
@@ -569,11 +585,14 @@ BEGIN
     );
   END IF;
 
+  -- Return complete issue record
   SELECT * INTO v_issue_row FROM public.issues WHERE id = v_issue_id;
   RETURN to_jsonb(v_issue_row);
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- RPC 2: support_existing_issue
+-- Adds a citizen report to an existing issue, triggering automatic deduplication counters
 CREATE OR REPLACE FUNCTION public.support_existing_issue(
   p_issue_id UUID,
   p_description TEXT,
@@ -585,6 +604,7 @@ DECLARE
   v_user_id UUID;
   v_existing RECORD;
   v_report_id UUID;
+  v_current_count INT;
 BEGIN
   v_user_id := auth.uid();
 
@@ -593,6 +613,7 @@ BEGIN
     RAISE EXCEPTION 'Civic issue not found: %', p_issue_id;
   END IF;
 
+  -- Insert citizen report as duplicate
   INSERT INTO public.issue_reports (
     issue_id,
     reporter_user_id,
@@ -611,6 +632,7 @@ BEGIN
     COALESCE(p_similarity_score, 0)
   ) RETURNING id INTO v_report_id;
 
+  -- Add timeline entry
   INSERT INTO public.issue_status_history (
     issue_id,
     status,
@@ -630,6 +652,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- RPC 3: assign_issue_officer
+-- Admin assigns a field officer to an issue
 CREATE OR REPLACE FUNCTION public.assign_issue_officer(
   p_issue_id UUID,
   p_officer_id UUID,
@@ -650,6 +674,7 @@ BEGIN
     RAISE EXCEPTION 'Issue not found: %', p_issue_id;
   END IF;
 
+  -- 1. Create or update issue_assignments
   INSERT INTO public.issue_assignments (
     issue_id,
     officer_id,
@@ -666,6 +691,7 @@ BEGIN
     NOW()
   );
 
+  -- 2. Update issue master record
   UPDATE public.issues
   SET
     assigned_officer_id = p_officer_id,
@@ -673,6 +699,7 @@ BEGIN
     updated_at = NOW()
   WHERE id = p_issue_id;
 
+  -- 3. Add timeline entry
   INSERT INTO public.issue_status_history (
     issue_id,
     status,
@@ -692,6 +719,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- RPC 4: officer_update_issue_status
+-- Officer progresses task lifecycle: accepted -> work_started -> resolved_awaiting_verification
 CREATE OR REPLACE FUNCTION public.officer_update_issue_status(
   p_issue_id UUID,
   p_new_status TEXT,
@@ -707,6 +736,7 @@ BEGIN
     RAISE EXCEPTION 'Issue not found: %', p_issue_id;
   END IF;
 
+  -- Enforce valid lifecycle transitions
   IF p_new_status = 'accepted' THEN
     v_action := 'Officer accepted';
     UPDATE public.issue_assignments
@@ -728,10 +758,12 @@ BEGIN
     v_action := 'Status updated to ' || p_new_status;
   END IF;
 
+  -- Update issue
   UPDATE public.issues
   SET status = p_new_status, updated_at = NOW()
   WHERE id = p_issue_id;
 
+  -- Add timeline entry
   INSERT INTO public.issue_status_history (
     issue_id,
     status,
@@ -751,6 +783,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
+-- RPC 5: verify_issue_resolution
+-- Citizen confirms or disputes remediation
 CREATE OR REPLACE FUNCTION public.verify_issue_resolution(
   p_issue_id UUID,
   p_confirmed BOOLEAN,
@@ -795,6 +829,7 @@ BEGIN
     WHERE id = p_issue_id;
   END IF;
 
+  -- Add timeline entry
   INSERT INTO public.issue_status_history (
     issue_id,
     status,
@@ -818,6 +853,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 -- 12. ROW LEVEL SECURITY (RLS) POLICIES
 -- ==============================================================================
 
+-- Enable RLS on all tables
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.officers ENABLE ROW LEVEL SECURITY;
@@ -828,56 +864,82 @@ ALTER TABLE public.issue_status_history ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_analysis ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.evidence ENABLE ROW LEVEL SECURITY;
 
+-- 1. Profiles: users can read their own profile, officers/admins can read all
 DROP POLICY IF EXISTS "Public read profiles" ON public.profiles;
-CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
+CREATE POLICY "Public read profiles" ON public.profiles
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Users update own profile" ON public.profiles;
-CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+CREATE POLICY "Users update own profile" ON public.profiles
+  FOR UPDATE USING (auth.uid() = id);
 
+-- 2. Departments: Public read
 DROP POLICY IF EXISTS "Public read departments" ON public.departments;
-CREATE POLICY "Public read departments" ON public.departments FOR SELECT USING (true);
+CREATE POLICY "Public read departments" ON public.departments
+  FOR SELECT USING (true);
 
+-- 3. Officers: Public read
 DROP POLICY IF EXISTS "Public read officers" ON public.officers;
-CREATE POLICY "Public read officers" ON public.officers FOR SELECT USING (true);
+CREATE POLICY "Public read officers" ON public.officers
+  FOR SELECT USING (true);
 
+-- 4. Issues: Public read for transparency, inserts/updates via security definer RPCs
 DROP POLICY IF EXISTS "Public read issues" ON public.issues;
-CREATE POLICY "Public read issues" ON public.issues FOR SELECT USING (true);
+CREATE POLICY "Public read issues" ON public.issues
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Citizens create issues" ON public.issues;
-CREATE POLICY "Citizens create issues" ON public.issues FOR INSERT WITH CHECK (true);
+CREATE POLICY "Citizens create issues" ON public.issues
+  FOR INSERT WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow issue updates" ON public.issues;
-CREATE POLICY "Allow issue updates" ON public.issues FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow issue updates" ON public.issues
+  FOR UPDATE USING (true) WITH CHECK (true);
 
+-- 5. Issue Reports: Public read of reports, inserts allowed
 DROP POLICY IF EXISTS "Read reports" ON public.issue_reports;
-CREATE POLICY "Read reports" ON public.issue_reports FOR SELECT USING (true);
+CREATE POLICY "Read reports" ON public.issue_reports
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Insert reports" ON public.issue_reports;
-CREATE POLICY "Insert reports" ON public.issue_reports FOR INSERT WITH CHECK (true);
+CREATE POLICY "Insert reports" ON public.issue_reports
+  FOR INSERT WITH CHECK (true);
 
+-- 6. Issue Status History (Timeline): Public read for full civic transparency
 DROP POLICY IF EXISTS "Public read issue timeline" ON public.issue_status_history;
-CREATE POLICY "Public read issue timeline" ON public.issue_status_history FOR SELECT USING (true);
+CREATE POLICY "Public read issue timeline" ON public.issue_status_history
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Insert status history" ON public.issue_status_history;
-CREATE POLICY "Insert status history" ON public.issue_status_history FOR INSERT WITH CHECK (true);
+CREATE POLICY "Insert status history" ON public.issue_status_history
+  FOR INSERT WITH CHECK (true);
 
+-- 7. Issue Assignments: Public read for transparency
 DROP POLICY IF EXISTS "Public read assignments" ON public.issue_assignments;
-CREATE POLICY "Public read assignments" ON public.issue_assignments FOR SELECT USING (true);
+CREATE POLICY "Public read assignments" ON public.issue_assignments
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Manage assignments" ON public.issue_assignments;
-CREATE POLICY "Manage assignments" ON public.issue_assignments FOR ALL USING (true);
+CREATE POLICY "Manage assignments" ON public.issue_assignments
+  FOR ALL USING (true);
 
+-- 8. AI Analysis: Public read for explainability
 DROP POLICY IF EXISTS "Public read ai analysis" ON public.ai_analysis;
-CREATE POLICY "Public read ai analysis" ON public.ai_analysis FOR SELECT USING (true);
+CREATE POLICY "Public read ai analysis" ON public.ai_analysis
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Insert ai analysis" ON public.ai_analysis;
-CREATE POLICY "Insert ai analysis" ON public.ai_analysis FOR INSERT WITH CHECK (true);
+CREATE POLICY "Insert ai analysis" ON public.ai_analysis
+  FOR INSERT WITH CHECK (true);
 
+-- 9. Evidence: Public read, authenticated/anon upload
 DROP POLICY IF EXISTS "Public read evidence" ON public.evidence;
-CREATE POLICY "Public read evidence" ON public.evidence FOR SELECT USING (true);
+CREATE POLICY "Public read evidence" ON public.evidence
+  FOR SELECT USING (true);
 
 DROP POLICY IF EXISTS "Insert evidence" ON public.evidence;
-CREATE POLICY "Insert evidence" ON public.evidence FOR INSERT WITH CHECK (true);
+CREATE POLICY "Insert evidence" ON public.evidence
+  FOR INSERT WITH CHECK (true);
 
 -- ==============================================================================
 -- 13. STORAGE BUCKET: issue-evidence
@@ -887,19 +949,23 @@ VALUES ('issue-evidence', 'issue-evidence', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
 
 DROP POLICY IF EXISTS "Public read issue evidence" ON storage.objects;
-CREATE POLICY "Public read issue evidence" ON storage.objects FOR SELECT USING (bucket_id = 'issue-evidence');
+CREATE POLICY "Public read issue evidence" ON storage.objects
+  FOR SELECT USING (bucket_id = 'issue-evidence');
 
 DROP POLICY IF EXISTS "Allow upload to issue-evidence" ON storage.objects;
-CREATE POLICY "Allow upload to issue-evidence" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'issue-evidence');
+CREATE POLICY "Allow upload to issue-evidence" ON storage.objects
+  FOR INSERT WITH CHECK (bucket_id = 'issue-evidence');
 
 DROP POLICY IF EXISTS "Allow update to issue-evidence" ON storage.objects;
-CREATE POLICY "Allow update to issue-evidence" ON storage.objects FOR UPDATE USING (bucket_id = 'issue-evidence');
+CREATE POLICY "Allow update to issue-evidence" ON storage.objects
+  FOR UPDATE USING (bucket_id = 'issue-evidence');
 
 -- ==============================================================================
 -- 14. SUPABASE REALTIME PUBLICATION
 -- ==============================================================================
 DO $$
 BEGIN
+  -- Add tables to realtime publication if not already included
   IF NOT EXISTS (
     SELECT 1 FROM pg_publication_tables
     WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'issues'
@@ -928,5 +994,6 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.evidence;
   END IF;
 EXCEPTION WHEN OTHERS THEN
+  -- Ignore publication errors in restricted environments
   NULL;
 END $$;

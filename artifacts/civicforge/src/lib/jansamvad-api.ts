@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  supabase,
   getIssues,
   getIssueById,
   createIssue,
@@ -7,9 +8,13 @@ import {
   addReportToIssue,
   getIssueReports,
   assignOfficer,
+  getOfficerAssignments,
   updateIssueStatus,
   verifyIssueResolution,
   getDashboardSummary,
+  getDepartments,
+  getOfficers,
+  uploadEvidenceFile,
   DEMO_DEPARTMENTS,
   DEMO_OFFICERS,
 } from "./supabase";
@@ -37,6 +42,7 @@ export {
   addReportToIssue,
   getIssueReports,
   assignOfficer,
+  getOfficerAssignments,
   updateIssueStatus,
   verifyIssueResolution,
   getDashboardSummary,
@@ -139,8 +145,9 @@ export function useDepartments() {
   return useQuery<Department[]>({
     queryKey: ["departments"],
     queryFn: async () => {
-      return DEMO_DEPARTMENTS;
+      return getDepartments();
     },
+    staleTime: 30000,
   });
 }
 
@@ -148,8 +155,9 @@ export function useOfficers() {
   return useQuery<Officer[]>({
     queryKey: ["officers"],
     queryFn: async () => {
-      return DEMO_OFFICERS;
+      return getOfficers();
     },
+    staleTime: 30000,
   });
 }
 
@@ -157,8 +165,8 @@ export function useOfficerAssignments(officerId?: string) {
   return useQuery<Issue[]>({
     queryKey: ["officer-assignments", officerId],
     queryFn: async () => {
-      const all = await getIssues();
-      return all;
+      if (!officerId) return [];
+      return getOfficerAssignments(officerId);
     },
     enabled: Boolean(officerId),
   });
@@ -234,12 +242,23 @@ export function useCreateIssue() {
 }
 
 export function useIssueReports(issueId: string | number) {
+  const idStr = String(issueId || "").trim();
+  const isValid = Boolean(idStr && idStr !== "undefined" && idStr !== "null");
+
   return useQuery({
-    queryKey: ["issue-reports", String(issueId)],
+    queryKey: ["issue-reports", idStr],
     queryFn: async () => {
-      return getIssueReports(String(issueId));
+      if (!isValid) return [];
+      try {
+        return await getIssueReports(idStr);
+      } catch (err) {
+        console.warn("[ReactQuery] useIssueReports notice:", err);
+        return [];
+      }
     },
-    enabled: Boolean(issueId),
+    enabled: isValid,
+    staleTime: 30000,
+    retry: 1,
   });
 }
 
@@ -304,10 +323,40 @@ export function useAssignOfficer() {
     mutationFn: async ({ issueId, officerId }) => {
       return assignOfficer(issueId, officerId);
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["issues"] });
+    onSuccess: (updatedIssue, variables) => {
+      // Set query data synchronously for instantaneous UI update
+      if (updatedIssue) {
+        queryClient.setQueryData(["issue", variables.issueId], updatedIssue);
+        queryClient.setQueryData(["issue", String(variables.issueId)], updatedIssue);
+        if (updatedIssue.id) {
+          queryClient.setQueryData(["issue", updatedIssue.id], updatedIssue);
+        }
+        if (updatedIssue.publicId) {
+          queryClient.setQueryData(["issue", updatedIssue.publicId], updatedIssue);
+        }
+      }
+
+      // Requirement 8: Invalidate ["issue", issueId], ["issues"], ["issue-timeline", issueId], ["officer-assignments"]
       queryClient.invalidateQueries({ queryKey: ["issue", variables.issueId] });
+      queryClient.invalidateQueries({ queryKey: ["issue", String(variables.issueId)] });
+      if (updatedIssue?.id) {
+        queryClient.invalidateQueries({ queryKey: ["issue", updatedIssue.id] });
+      }
+      if (updatedIssue?.publicId) {
+        queryClient.invalidateQueries({ queryKey: ["issue", updatedIssue.publicId] });
+      }
+      queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["issue-timeline", variables.issueId] });
+      queryClient.invalidateQueries({ queryKey: ["issue-timeline", String(variables.issueId)] });
+      if (updatedIssue?.id) {
+        queryClient.invalidateQueries({ queryKey: ["issue-timeline", updatedIssue.id] });
+      }
+      if (updatedIssue?.publicId) {
+        queryClient.invalidateQueries({ queryKey: ["issue-timeline", updatedIssue.publicId] });
+      }
       queryClient.invalidateQueries({ queryKey: ["officer-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["officers"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 }
@@ -363,12 +412,39 @@ export function useAddEvidence() {
       officerName?: string;
     }
   >({
-    mutationFn: async ({ issueId, caption }) => {
-      return updateIssueStatus(issueId, "Work Started", `Evidence uploaded: ${caption}`);
+    mutationFn: async ({ issueId, type, uploaderType, url, caption, officerName }) => {
+      // 1. Insert into evidence table
+      try {
+        const evType = type === "after" ? "after" : type === "before" ? "before" : "initial_report";
+        const res = await supabase.from("evidence").insert([
+          {
+            issue_id: String(issueId),
+            evidence_type: evType,
+            file_url: url,
+            file_name: caption || "Ground evidence",
+          },
+        ]);
+        if (res.error) {
+          console.warn("[Supabase] Direct evidence insert notice:", res.error.message);
+        }
+      } catch (err) {
+        console.warn("[Supabase] Evidence persistence notice:", err);
+      }
+
+      // 2. Update issue status
+      const nextStatus = type === "after" ? "Resolved - Awaiting Verification" : "Work Started";
+      return updateIssueStatus(
+        issueId,
+        nextStatus,
+        `Evidence uploaded (${type.toUpperCase()}): ${caption}`,
+        uploaderType === "officer" ? `Officer ${officerName || "Field Inspector"}` : "Citizen"
+      );
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["issue", variables.issueId] });
+      queryClient.invalidateQueries({ queryKey: ["issue", String(variables.issueId)] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["officer-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 }

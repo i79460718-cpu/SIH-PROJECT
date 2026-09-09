@@ -27,12 +27,16 @@ import {
 import { PriorityBadge } from "../components/PriorityBadge";
 import { StatusBadge } from "../components/StatusBadge";
 import { LoadingBlock, ErrorBlock } from "../components/civic-shell";
+import { useAuth } from "../lib/auth-context";
+import { uploadEvidenceFile } from "../lib/supabase";
 
 export default function OfficerPage() {
+  const { role, switchDemoRole, setLoginModalOpen } = useAuth();
   const { data: officers, isLoading: isOfficersLoading } = useOfficers();
 
-  const [selectedOfficerId, setSelectedOfficerId] = useState<string>("off-01"); // Default: Amit Kumar
-  const { data: assignments, isLoading: isAssignmentsLoading, refetch } = useOfficerAssignments(selectedOfficerId);
+  const [selectedOfficerId, setSelectedOfficerId] = useState<string>("");
+  const activeOfficerId = selectedOfficerId || (officers && officers.length > 0 ? officers[0].id : "");
+  const { data: assignments, isLoading: isAssignmentsLoading, refetch } = useOfficerAssignments(activeOfficerId);
 
   const updateStatusMutation = useUpdateIssueStatus();
   const addEvidenceMutation = useAddEvidence();
@@ -44,16 +48,17 @@ export default function OfficerPage() {
     "https://images.unsplash.com/photo-1578991624414-276ef23a534f?auto=format&fit=crop&w=800&q=80"
   );
   const [evidenceType, setEvidenceType] = useState<"after" | "before" | "site_inspection">("after");
+  const [uploadingFile, setUploadingFile] = useState(false);
 
-  const currentOfficer = officers?.find((o) => o.id === selectedOfficerId);
+  const currentOfficer = officers?.find((o) => o.id === activeOfficerId) || officers?.[0];
 
   // Handle Accept Task
-  const handleAcceptTask = async (issueId: number) => {
+  const handleAcceptTask = async (issueId: string | number) => {
     try {
       await updateStatusMutation.mutateAsync({
         issueId,
         status: "Accepted",
-        comment: `Officer ${currentOfficer?.name} accepted task for field inspection.`,
+        comment: `Officer ${currentOfficer?.name || "Field Officer"} accepted task for field inspection.`,
         actor: "Field Officer",
       });
       refetch();
@@ -63,12 +68,12 @@ export default function OfficerPage() {
   };
 
   // Handle Start Work / Reached Location
-  const handleStartWork = async (issueId: number) => {
+  const handleStartWork = async (issueId: string | number) => {
     try {
       await updateStatusMutation.mutateAsync({
         issueId,
         status: "Work Started",
-        comment: `Officer ${currentOfficer?.name} reached location and initiated repair work.`,
+        comment: `Officer ${currentOfficer?.name || "Field Officer"} reached location and initiated repair work.`,
         actor: "Field Officer",
       });
       refetch();
@@ -110,6 +115,26 @@ export default function OfficerPage() {
 
   return (
     <div className="mx-auto max-w-[1040px] px-4 py-8 sm:px-6 lg:px-8">
+      {/* Persona Notice if not in Officer mode */}
+      {role !== "officer" && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-500/30 bg-blue-500/10 p-4 text-xs">
+          <div className="flex items-center gap-2.5">
+            <Info size={16} className="shrink-0 text-blue-600 dark:text-blue-400" />
+            <span className="text-blue-900 dark:text-blue-200">
+              You are currently viewing as <strong>{role.toUpperCase()}</strong>. Switch to <strong>Field Officer</strong> persona to execute assignments and upload resolution evidence.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => switchDemoRole("officer")}
+            className="flex items-center gap-1.5 rounded-full bg-blue-600 px-3.5 py-1.5 font-bold text-white shadow-sm hover:bg-blue-700"
+          >
+            <HardHat size={13} />
+            Switch to Officer Persona
+          </button>
+        </div>
+      )}
+
       {/* Officer Profile Header */}
       <div className="rounded-2xl border-2 border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -317,17 +342,44 @@ export default function OfficerPage() {
 
             <div className="mt-4 space-y-4">
               <div>
-                <label className="text-[11px] font-bold uppercase text-[hsl(var(--muted-foreground))]">
-                  Evidence Photo URL / Proof
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold uppercase text-[hsl(var(--muted-foreground))]">
+                    Evidence Photo URL / Proof
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1 text-[11px] font-bold text-[hsl(var(--primary))] hover:underline">
+                    <Upload size={12} />
+                    <span>{uploadingFile ? "Uploading..." : "Upload File"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file || !evidenceModalIssue) return;
+                        setUploadingFile(true);
+                        try {
+                          const res = await uploadEvidenceFile(file, String(evidenceModalIssue.id), "after", evidenceCaption);
+                          if (res.fileUrl) {
+                            setEvidencePhotoUrl(res.fileUrl);
+                          }
+                        } catch (err) {
+                          console.error("Upload error:", err);
+                        } finally {
+                          setUploadingFile(false);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
                 <input
                   type="text"
                   value={evidencePhotoUrl}
                   onChange={(e) => setEvidencePhotoUrl(e.target.value)}
+                  placeholder="https://... or upload a local image file"
                   className="mt-1 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-2.5 text-xs text-[hsl(var(--foreground))] focus:border-[hsl(var(--primary))] focus:outline-none"
                 />
                 {evidencePhotoUrl && (
-                  <div className="mt-2 h-32 w-full overflow-hidden rounded-xl border border-[hsl(var(--border))]">
+                  <div className="mt-2 h-32 w-full overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-stone-900">
                     <img src={evidencePhotoUrl} alt="Proof" className="h-full w-full object-cover" />
                   </div>
                 )}

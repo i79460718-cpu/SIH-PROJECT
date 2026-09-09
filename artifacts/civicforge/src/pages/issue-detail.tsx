@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link } from "wouter";
 import {
   ArrowLeft,
@@ -31,6 +31,7 @@ import {
   useAssignOfficer,
   useVerifyResolution,
 } from "../lib/jansamvad-api";
+import { subscribeToIssue } from "../lib/supabase";
 import { PriorityBadge } from "../components/PriorityBadge";
 import { StatusBadge } from "../components/StatusBadge";
 import { AiAnalysisPanel } from "../components/AiAnalysisPanel";
@@ -56,7 +57,19 @@ export default function IssueDetailPage() {
   const [supportSuccess, setSupportSuccess] = useState<string | null>(null);
   const [selectedOfficerId, setSelectedOfficerId] = useState("");
   const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assignSuccess, setAssignSuccess] = useState<string | null>(null);
   const [citizenFeedback, setCitizenFeedback] = useState("");
+
+  useEffect(() => {
+    if (!issue?.publicId) return;
+    const unsubscribe = subscribeToIssue(issue.publicId, () => {
+      refetch();
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [issue?.publicId, refetch]);
 
   if (isLoading) {
     return (
@@ -112,14 +125,21 @@ export default function IssueDetailPage() {
 
   const handleAssignOfficer = async () => {
     if (!selectedOfficerId) return;
+    setAssignError(null);
+    setAssignSuccess(null);
     try {
       await assignMutation.mutateAsync({
         issueId: issue.id,
         officerId: selectedOfficerId,
       });
-      setShowAssignModal(false);
-    } catch (err) {
-      alert("Failed to assign officer.");
+      setAssignSuccess("Officer assigned successfully");
+      setTimeout(() => {
+        setShowAssignModal(false);
+        setAssignSuccess(null);
+      }, 1000);
+    } catch (err: any) {
+      console.error("[Assign Officer Error]:", err);
+      setAssignError(err?.message || "Failed to assign officer in Supabase.");
     }
   };
 
@@ -238,10 +258,23 @@ export default function IssueDetailPage() {
 
           <div>
             <span className="text-[10px] font-bold uppercase text-[hsl(var(--muted-foreground))]">Assigned Officer</span>
-            <p className="mt-0.5 font-semibold text-[hsl(var(--foreground))] flex items-center gap-1 truncate">
-              <HardHat size={12} className="text-emerald-600 shrink-0" />
-              {issue.assignedOfficer ? `${issue.assignedOfficer.name} (${issue.assignedOfficer.designation})` : "Unassigned"}
-            </p>
+            {issue.assignedOfficer ? (
+              <div className="mt-0.5 space-y-0.5">
+                <p className="font-semibold text-[hsl(var(--foreground))] flex items-center gap-1 truncate">
+                  <HardHat size={12} className="text-emerald-600 shrink-0" />
+                  <span>{issue.assignedOfficer.name}</span>
+                </p>
+                <p className="text-[10px] text-[hsl(var(--muted-foreground))] truncate">
+                  Badge: <span className="font-medium text-[hsl(var(--foreground))]">{issue.assignedOfficer.badge}</span> • {issue.assignedOfficer.department}
+                  {issue.assignedOfficer.phone ? ` • Tel: ${issue.assignedOfficer.phone}` : ""}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-0.5 font-semibold text-[hsl(var(--muted-foreground))] flex items-center gap-1">
+                <HardHat size={12} className="text-stone-400 shrink-0" />
+                Unassigned
+              </p>
+            )}
           </div>
 
           <div>
@@ -490,24 +523,49 @@ export default function IssueDetailPage() {
               <label className="text-xs font-bold uppercase text-[hsl(var(--muted-foreground))]">
                 Available Field Officers
               </label>
-              <select
-                value={selectedOfficerId}
-                onChange={(e) => setSelectedOfficerId(e.target.value)}
-                className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-xs font-medium focus:border-[hsl(var(--primary))] focus:outline-none"
-              >
-                <option value="">-- Choose on-ground officer --</option>
-                {officers?.map((off) => (
-                  <option key={off.id} value={off.id}>
-                    {off.name} • {off.designation} ({off.department}) • {off.activeTasks} active
-                  </option>
-                ))}
-              </select>
+              {!officers || officers.length === 0 ? (
+                <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted)/0.4)] p-3 text-xs text-[hsl(var(--muted-foreground))]">
+                  No active officers configured.
+                </div>
+              ) : (
+                <select
+                  value={selectedOfficerId}
+                  onChange={(e) => {
+                    setSelectedOfficerId(e.target.value);
+                    setAssignError(null);
+                  }}
+                  className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-xs font-medium focus:border-[hsl(var(--primary))] focus:outline-none"
+                >
+                  <option value="">-- Choose on-ground officer --</option>
+                  {officers.map((off) => (
+                    <option key={off.id} value={off.id}>
+                      {off.name} • {off.designation} ({off.department}) • {off.activeTasks} active
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
+
+            {assignError && (
+              <div className="mt-3 rounded-xl border border-red-500/30 bg-red-500/10 p-2.5 text-xs text-red-600 font-medium">
+                {assignError}
+              </div>
+            )}
+
+            {assignSuccess && (
+              <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-600 font-medium">
+                {assignSuccess}
+              </div>
+            )}
 
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
-                onClick={() => setShowAssignModal(false)}
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setAssignError(null);
+                  setAssignSuccess(null);
+                }}
                 className="rounded-full px-4 py-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]"
               >
                 Cancel

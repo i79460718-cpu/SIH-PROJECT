@@ -19,6 +19,7 @@ import {
 import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { useLanguage } from "../lib/language-context";
+import { useAuth } from "../lib/auth-context";
 import { TrackComplaintDialog } from "./TrackComplaintDialog";
 import { useDashboardSummary } from "../lib/jansamvad-api";
 
@@ -28,6 +29,7 @@ export function CivicShell({ children }: { children: ReactNode }) {
   const [trackOpen, setTrackOpen] = useState(false);
   const { lang, setLang, t } = useLanguage();
   const { data: summary } = useDashboardSummary();
+  const { role, setLoginModalOpen, profile } = useAuth();
 
   const navItems = [
     { href: "/", label: t("nav.dashboard"), icon: Layers },
@@ -56,13 +58,13 @@ export function CivicShell({ children }: { children: ReactNode }) {
 
           <div className="flex items-center gap-4 text-[11px] text-[hsl(var(--background)/.8)]">
             <span>
-              Today: <strong className="text-white">1,284</strong> received
+              Total Reports: <strong className="text-white">{summary ? summary.reportsReceived : "..."}</strong>
             </span>
             <span className="hidden md:inline">
-              Merged: <strong className="text-amber-300">318</strong> duplicates
+              Merged: <strong className="text-amber-300">{summary ? summary.duplicatesMerged : "..."}</strong>
             </span>
             <span className="hidden lg:inline">
-              Spam: <strong className="text-red-300">73</strong> blocked
+              Spam Filtered: <strong className="text-red-300">{summary ? summary.spamBlocked : "..."}</strong>
             </span>
 
             {/* Language Switcher */}
@@ -131,6 +133,36 @@ export function CivicShell({ children }: { children: ReactNode }) {
 
           {/* Action CTAs */}
           <div className="hidden items-center gap-2.5 sm:flex">
+            {/* Portal Role / Login Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setLoginModalOpen(true)}
+              className={`focus-ring group flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all ${
+                role === "admin"
+                  ? "border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+                  : role === "officer"
+                  ? "border-blue-500 bg-blue-500/10 text-blue-700 dark:text-blue-300"
+                  : "border-[hsl(var(--border))] bg-[hsl(var(--muted)/.6)] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+              }`}
+            >
+              {role === "admin" ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-amber-500" />
+                  Admin HQ
+                </>
+              ) : role === "officer" ? (
+                <>
+                  <HardHat size={13} className="text-blue-600" />
+                  Officer Mode
+                </>
+              ) : (
+                <>
+                  <Users size={13} />
+                  Role / Portal
+                </>
+              )}
+            </button>
+
             {/* Prominent Track Complaint Action */}
             <button
               type="button"
