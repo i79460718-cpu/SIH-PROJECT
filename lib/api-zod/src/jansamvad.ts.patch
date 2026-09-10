@@ -1,0 +1,32 @@
+--- lib/api-zod/src/jansamvad.ts
++++ lib/api-zod/src/jansamvad.ts
+@@ -83,6 +83,9 @@
+   detectedCategory: CategorySchema,
+   categoryConfidence: z.number(),
+   detectedLanguage: z.string(),
++  languageConfidence: z.number().optional(),
++  normalizedDescription: z.string().optional(),
++  normalizedIntent: z.string().optional(),
+   severity: SeveritySchema,
+   priority: PrioritySchema,
+   priorityScore: z.number(),
+@@ -126,6 +129,9 @@
+   locationText: z.string(),
+   evidenceUrl: z.string().optional(),
+   reportedAt: z.string(),
++  originalLanguage: z.string().optional(),
++  normalizedDescription: z.string().optional(),
++  detectedIntent: z.string().optional(),
+   similarityToParent: z.number().optional(),
+ });
+ export type IssueReport = z.infer<typeof IssueReportSchema>;
+@@ -144,6 +150,9 @@
+   publicId: z.string(),
+   title: z.string(),
+   description: z.string(),
++  originalLanguage: z.string().optional(),
++  normalizedDescription: z.string().optional(),
++  detectedIntent: z.string().optional(),
+   category: CategorySchema,
+   district: z.string(),
+   locationText: z.string(),
