@@ -1,6 +1,6 @@
 import { Router, type IRouter, type Request, type Response } from "express";
 import { FrameChallengeWithAiBody, FrameChallengeWithAiResponse } from "@workspace/api-zod";
-import { issueRepository } from "../domain/issueRepository";
+import { issueRepository } from "../domain/issueRepository.ts";
 
 const router: IRouter = Router();
 

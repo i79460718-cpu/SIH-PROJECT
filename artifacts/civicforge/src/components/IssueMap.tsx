@@ -10,7 +10,7 @@ import { useLanguage } from "../lib/language-context";
 
 interface IssueMapProps {
   issues: Issue[];
-  selectedIssueId?: number | null;
+  selectedIssueId?: string | number | null;
   onSelectIssue?: (issue: Issue) => void;
 }
 

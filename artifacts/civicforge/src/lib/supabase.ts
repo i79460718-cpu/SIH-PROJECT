@@ -935,6 +935,107 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 }
 
 /**
+ * Fetch departments from Supabase or fall back to demo data
+ */
+export async function getDepartments(): Promise<Department[]> {
+  try {
+    const { data, error } = await supabase
+      .from("departments")
+      .select("*")
+      .order("name");
+
+    if (error || !data || !Array.isArray(data) || data.length === 0) {
+      return DEMO_DEPARTMENTS;
+    }
+
+    return data.map((d: any) => ({
+      id: String(d.id),
+      name: d.name,
+      code: d.code,
+      head: d.head || "Not assigned",
+      activeOfficers: 0,
+      openIssues: 0,
+      slaRate: 90,
+      categories: ["Other"],
+    }));
+  } catch {
+    return DEMO_DEPARTMENTS;
+  }
+}
+
+/**
+ * Fetch officers from Supabase or fall back to demo data
+ */
+export async function getOfficers(): Promise<Officer[]> {
+  try {
+    const { data, error } = await supabase
+      .from("officers")
+      .select("*, departments!inner(code, name)")
+      .eq("active", true)
+      .order("name");
+
+    if (error || !data || !Array.isArray(data) || data.length === 0) {
+      return DEMO_OFFICERS;
+    }
+
+    return data.map((o: any) => ({
+      id: String(o.id),
+      name: o.name,
+      badge: o.badge_number || "JH-OFFICER",
+      designation: o.designation || "Field Inspector",
+      department: o.departments?.name || "General Civic Administration",
+      district: o.district || "Ranchi",
+      phone: o.phone || "",
+      activeTasks: 0,
+      rating: 4.5,
+    }));
+  } catch {
+    return DEMO_OFFICERS;
+  }
+}
+
+/**
+ * Fetch issues assigned to a specific officer from Supabase
+ */
+export async function getOfficerAssignments(officerId: string): Promise<Issue[]> {
+  try {
+    // Try to find the officer in Supabase first
+    const { data: officerRows } = await supabase
+      .from("officers")
+      .select("id")
+      .eq("id", officerId)
+      .maybeSingle();
+
+    if (officerRows?.id) {
+      const { data, error } = await supabase
+        .from("issues")
+        .select("*")
+        .eq("assigned_officer_id", officerId)
+        .order("created_at", { ascending: false });
+
+      if (!error && data && Array.isArray(data) && data.length > 0) {
+        return data.map(mapSupabaseRowToIssue);
+      }
+    }
+
+    // Fallback: filter demo issues by officer name match
+    const officer = DEMO_OFFICERS.find((o) => o.id === officerId);
+    if (officer) {
+      const allIssues = await getIssues();
+      return allIssues.filter(
+        (i) => i.assignedOfficer && typeof i.assignedOfficer === "object"
+          ? (i.assignedOfficer as any).id === officerId
+          : typeof i.assignedOfficer === "string" && i.assignedOfficer === officer.name
+      );
+    }
+
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+/**
  * Realtime subscription to updates on a specific issue
  */
 export function subscribeToIssue(

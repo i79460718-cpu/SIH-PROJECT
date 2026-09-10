@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { issueRepository } from "../domain/issueRepository";
+import { issueRepository } from "../domain/issueRepository.ts";
 
 const router: IRouter = Router();
 

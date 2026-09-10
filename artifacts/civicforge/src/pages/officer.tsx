@@ -51,7 +51,7 @@ export default function OfficerPage() {
   const currentOfficer = officers?.find((o) => o.id === selectedOfficerId);
 
   // Handle Accept Task
-  const handleAcceptTask = async (issueId: number) => {
+  const handleAcceptTask = async (issueId: string | number) => {
     try {
       await updateStatusMutation.mutateAsync({
         issueId,
@@ -66,7 +66,7 @@ export default function OfficerPage() {
   };
 
   // Handle Start Work / Reached Location
-  const handleStartWork = async (issueId: number) => {
+  const handleStartWork = async (issueId: string | number) => {
     try {
       await updateStatusMutation.mutateAsync({
         issueId,

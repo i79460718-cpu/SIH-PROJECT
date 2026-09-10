@@ -14,11 +14,14 @@ export interface SpamCheckResult {
 }
 
 const AD_PATTERNS = [
-  /buy\s+(now|crypto|bitcoin|followers|shoes|viagra|course)/i,
+  /buy\s+(cheap\s+)?(crypto|bitcoin|nft|followers|shoes|viagra|course|now)/i,
+  /win\s+(free\s+)?(iphone|cash|money|prize|crypto)/i,
+  /click\s+(here|link|to\s+win)/i,
   /call\s+(for\s+loan|for\s+escort|girls|whatsapp\s+now|now\s+for)/i,
   /earn\s+(\$|rs|inr|\d+k|\d+\s*lakh)\s+(daily|weekly|from\s+home)/i,
   /casino|poker|lottery|jackpot|free\s+recharge|rummy/i,
-  /seo\s+services?|click\s+here\s+to\s+win|telegram\s+channel/i,
+  /seo\s+services?|telegram\s+channel/i,
+  /\b(crypto|bitcoin|nft|airdrop)\b/i,
   /telegram\s*:\s*@/i,
   /100%\s+guaranteed\s+(profit|returns|loan)/i,
 ];

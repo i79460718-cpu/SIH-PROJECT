@@ -1,5 +1,5 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { issueRepository } from "../domain/issueRepository";
+import { issueRepository } from "../domain/issueRepository.ts";
 import { CreateIssueInputSchema, SupportIssueInputSchema, IssueStatusSchema } from "@workspace/api-zod";
 
 const router: IRouter = Router();
@@ -60,7 +60,7 @@ router.post("/issues", async (req: Request, res: Response) => {
 // GET /api/issues/:id
 router.get("/issues/:id", async (req: Request, res: Response) => {
   try {
-    const issue = await issueRepository.getIssueById(req.params.id as string);
+    const issue = await issueRepository.getIssueById(req.params.id);
     if (!issue) {
       res.status(404).json({ error: "Issue not found" });
       return;
@@ -75,8 +75,7 @@ router.get("/issues/:id", async (req: Request, res: Response) => {
 // POST /api/issues/:id/support
 router.post("/issues/:id/support", async (req: Request, res: Response) => {
   try {
-    const numId = parseInt(req.params.id as string, 10);
-    const issue = await issueRepository.getIssueById(numId);
+    const issue = await issueRepository.getIssueById(req.params.id);
     if (!issue) {
       res.status(404).json({ error: "Issue not found" });
       return;
@@ -93,13 +92,12 @@ router.post("/issues/:id/support", async (req: Request, res: Response) => {
 // POST /api/issues/:id/assign
 router.post("/issues/:id/assign", async (req: Request, res: Response) => {
   try {
-    const numId = parseInt(req.params.id as string, 10);
     const { officerId } = req.body;
     if (!officerId) {
       res.status(400).json({ error: "officerId is required" });
       return;
     }
-    const updated = await issueRepository.assignOfficer(numId, officerId);
+    const updated = await issueRepository.assignOfficer(req.params.id, officerId);
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: "Failed to assign officer", details: String(error) });
@@ -109,14 +107,13 @@ router.post("/issues/:id/assign", async (req: Request, res: Response) => {
 // POST /api/issues/:id/status
 router.post("/issues/:id/status", async (req: Request, res: Response) => {
   try {
-    const numId = parseInt(req.params.id as string, 10);
     const { status, comment, actor } = req.body;
     const parseStatus = IssueStatusSchema.safeParse(status);
     if (!parseStatus.success) {
       res.status(400).json({ error: "Invalid status" });
       return;
     }
-    const updated = await issueRepository.updateStatus(numId, parseStatus.data, comment, actor);
+    const updated = await issueRepository.updateStatus(req.params.id, parseStatus.data, comment, actor);
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: "Failed to update status", details: String(error) });
@@ -126,13 +123,12 @@ router.post("/issues/:id/status", async (req: Request, res: Response) => {
 // POST /api/issues/:id/evidence
 router.post("/issues/:id/evidence", async (req: Request, res: Response) => {
   try {
-    const numId = parseInt(req.params.id as string, 10);
     const { type, uploaderType, url, caption, officerName } = req.body;
     if (!url || !caption) {
       res.status(400).json({ error: "url and caption are required" });
       return;
     }
-    const updated = await issueRepository.addEvidence(numId, {
+    const updated = await issueRepository.addEvidence(req.params.id, {
       type: type || "site_inspection",
       uploaderType: uploaderType || "officer",
       url,
@@ -148,9 +144,8 @@ router.post("/issues/:id/evidence", async (req: Request, res: Response) => {
 // POST /api/issues/:id/verify
 router.post("/issues/:id/verify", async (req: Request, res: Response) => {
   try {
-    const numId = parseInt(req.params.id as string, 10);
     const { confirmed, comment } = req.body;
-    const updated = await issueRepository.verifyResolution(numId, Boolean(confirmed), comment);
+    const updated = await issueRepository.verifyResolution(req.params.id, Boolean(confirmed), comment);
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: "Failed to verify resolution", details: String(error) });

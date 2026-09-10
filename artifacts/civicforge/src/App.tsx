@@ -5,6 +5,8 @@ import { CivicShell } from "@/components/civic-shell";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { LanguageProvider } from "@/lib/language-context";
+import { AuthProvider } from "@/lib/auth-context";
+import { LoginModal } from "@/components/LoginModal";
 import { Route, Router as WouterRouter, Switch, useLocation } from "wouter";
 
 // Pages
@@ -62,10 +64,13 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <LanguageProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Router />
-          </WouterRouter>
-          <Toaster />
+          <AuthProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Router />
+            </WouterRouter>
+            <LoginModal />
+            <Toaster />
+          </AuthProvider>
         </LanguageProvider>
       </TooltipProvider>
     </QueryClientProvider>

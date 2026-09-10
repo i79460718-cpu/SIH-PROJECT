@@ -22,12 +22,14 @@ import { useLanguage } from "../lib/language-context";
 import { TrackComplaintDialog } from "./TrackComplaintDialog";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { useDashboardSummary } from "../lib/jansamvad-api";
+import { useAuth } from "../lib/auth-context";
 
 export function CivicShell({ children }: { children: ReactNode }) {
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const [trackOpen, setTrackOpen] = useState(false);
-  const { lang, setLang, t } = useLanguage();
+  const { t } = useLanguage();
+  const { role, setLoginModalOpen } = useAuth();
   const { data: summary } = useDashboardSummary();
 
   const navItems = [
@@ -57,13 +59,13 @@ export function CivicShell({ children }: { children: ReactNode }) {
 
           <div className="flex items-center gap-4 text-[11px] text-[hsl(var(--background)/.8)]">
             <span>
-              {t("top.today")} <strong className="text-white">1,284</strong> {t("top.received")}
+              {t("top.today")} <strong className="text-white">{summary ? summary.reportsReceived : "..."}</strong> {t("top.received")}
             </span>
             <span className="hidden md:inline">
-              {t("top.merged")} <strong className="text-amber-300">318</strong> {t("top.duplicates")}
+              {t("top.merged")} <strong className="text-amber-300">{summary ? summary.duplicatesMerged : "..."}</strong> {t("top.duplicates")}
             </span>
             <span className="hidden lg:inline">
-              {t("top.spam")} <strong className="text-red-300">73</strong> {t("top.blocked")}
+              {t("top.spam")} <strong className="text-red-300">{summary ? summary.spamBlocked : "..."}</strong> {t("top.blocked")}
             </span>
 
             {/* Language Switcher */}
@@ -112,6 +114,14 @@ export function CivicShell({ children }: { children: ReactNode }) {
 
           {/* Action CTAs */}
           <div className="hidden items-center gap-2.5 sm:flex">
+            <button
+              type="button"
+              onClick={() => setLoginModalOpen(true)}
+              className="focus-ring flex items-center gap-1.5 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--muted)/.6)] px-3 py-2 text-xs font-bold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+            >
+              {role === "officer" ? <HardHat size={13} /> : <Users size={13} />}
+              {role === "officer" ? "Officer Mode" : role === "admin" ? "Admin HQ" : "Role / Portal"}
+            </button>
             {/* Prominent Track Complaint Action */}
             <button
               type="button"
@@ -294,6 +304,7 @@ export function ErrorBlock({
   onRetry?: () => void;
   label?: string;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="rounded-2xl border border-[hsl(var(--destructive)/.35)] bg-[hsl(var(--destructive)/.06)] p-8 text-center" data-testid="state-error">
       <Activity className="mx-auto mb-3 text-[hsl(var(--destructive))]" size={22} />

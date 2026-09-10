@@ -10,8 +10,10 @@ import {
   updateIssueStatus,
   verifyIssueResolution,
   getDashboardSummary,
-  DEMO_DEPARTMENTS,
-  DEMO_OFFICERS,
+  getDepartments,
+  getOfficers,
+  getOfficerAssignments,
+  supabase,
 } from "./supabase";
 import { checkSpam } from "../services/spamDetection";
 import { detectCategory } from "../services/categoryDetection";
@@ -40,6 +42,7 @@ export {
   updateIssueStatus,
   verifyIssueResolution,
   getDashboardSummary,
+  getOfficerAssignments,
 };
 
 export type {
@@ -138,28 +141,23 @@ export function useDashboardSummary() {
 export function useDepartments() {
   return useQuery<Department[]>({
     queryKey: ["departments"],
-    queryFn: async () => {
-      return DEMO_DEPARTMENTS;
-    },
+    queryFn: getDepartments,
+    staleTime: 30000,
   });
 }
 
 export function useOfficers() {
   return useQuery<Officer[]>({
     queryKey: ["officers"],
-    queryFn: async () => {
-      return DEMO_OFFICERS;
-    },
+    queryFn: getOfficers,
+    staleTime: 30000,
   });
 }
 
 export function useOfficerAssignments(officerId?: string) {
   return useQuery<Issue[]>({
     queryKey: ["officer-assignments", officerId],
-    queryFn: async () => {
-      const all = await getIssues();
-      return all;
-    },
+    queryFn: async () => officerId ? getOfficerAssignments(officerId) : [],
     enabled: Boolean(officerId),
   });
 }
@@ -234,12 +232,22 @@ export function useCreateIssue() {
 }
 
 export function useIssueReports(issueId: string | number) {
+  const idStr = String(issueId || "").trim();
+  const isValid = Boolean(idStr && idStr !== "undefined" && idStr !== "null");
   return useQuery({
-    queryKey: ["issue-reports", String(issueId)],
+    queryKey: ["issue-reports", idStr],
     queryFn: async () => {
-      return getIssueReports(String(issueId));
+      if (!isValid) return [];
+      try {
+        return await getIssueReports(idStr);
+      } catch (error) {
+        console.warn("[ReactQuery] useIssueReports notice:", error);
+        return [];
+      }
     },
-    enabled: Boolean(issueId),
+    enabled: isValid,
+    staleTime: 30000,
+    retry: 1,
   });
 }
 
@@ -304,10 +312,18 @@ export function useAssignOfficer() {
     mutationFn: async ({ issueId, officerId }) => {
       return assignOfficer(issueId, officerId);
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (updatedIssue, variables) => {
+      if (updatedIssue) {
+        queryClient.setQueryData(["issue", String(variables.issueId)], updatedIssue);
+        queryClient.setQueryData(["issue", updatedIssue.id], updatedIssue);
+        queryClient.setQueryData(["issue", updatedIssue.publicId], updatedIssue);
+      }
       queryClient.invalidateQueries({ queryKey: ["issues"] });
-      queryClient.invalidateQueries({ queryKey: ["issue", variables.issueId] });
+      queryClient.invalidateQueries({ queryKey: ["issue", String(variables.issueId)] });
+      queryClient.invalidateQueries({ queryKey: ["issue-timeline", String(variables.issueId)] });
       queryClient.invalidateQueries({ queryKey: ["officer-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["officers"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 }
@@ -363,12 +379,28 @@ export function useAddEvidence() {
       officerName?: string;
     }
   >({
-    mutationFn: async ({ issueId, caption }) => {
-      return updateIssueStatus(issueId, "Work Started", `Evidence uploaded: ${caption}`);
+    mutationFn: async ({ issueId, type, uploaderType, url, caption, officerName }) => {
+      try {
+        const evidenceType = type === "after" ? "after" : type === "before" ? "before" : "initial_report";
+        const { error } = await supabase.from("evidence").insert([{
+          issue_id: String(issueId), evidence_type: evidenceType, file_url: url,
+          file_name: caption || "Ground evidence",
+        }]);
+        if (error) console.warn("[Supabase] Evidence persistence notice:", error.message);
+      } catch (error) {
+        console.warn("[Supabase] Evidence persistence notice:", error);
+      }
+      const nextStatus = type === "after" ? "Resolved - Awaiting Verification" : "Work Started";
+      return updateIssueStatus(
+        issueId, nextStatus, `Evidence uploaded (${type.toUpperCase()}): ${caption}`,
+        uploaderType === "officer" ? `Officer ${officerName || "Field Inspector"}` : "Citizen",
+      );
     },
     onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ["issue", variables.issueId] });
+      queryClient.invalidateQueries({ queryKey: ["issue", String(variables.issueId)] });
       queryClient.invalidateQueries({ queryKey: ["issues"] });
+      queryClient.invalidateQueries({ queryKey: ["officer-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
     },
   });
 }

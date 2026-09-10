@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { GetSummaryResponse } from "@workspace/api-zod";
-import { challenges } from "./challenges";
+import { challenges } from "./challenges.ts";
 
 const router: IRouter = Router();
 

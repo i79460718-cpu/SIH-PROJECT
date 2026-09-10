@@ -1,11 +1,11 @@
 import { Router, type IRouter } from "express";
-import healthRouter from "./health";
-import issuesRouter from "./issues";
-import dashboardRouter from "./dashboard";
-import challengesRouter from "./challenges";
-import partnersRouter from "./partners";
-import insightsRouter from "./insights";
-import aiRouter from "./ai";
+import healthRouter from "./health.ts";
+import issuesRouter from "./issues.ts";
+import dashboardRouter from "./dashboard.ts";
+import challengesRouter from "./challenges.ts";
+import partnersRouter from "./partners.ts";
+import insightsRouter from "./insights.ts";
+import aiRouter from "./ai.ts";
 
 const router: IRouter = Router();
 

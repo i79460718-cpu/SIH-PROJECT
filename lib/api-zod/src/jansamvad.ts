@@ -57,7 +57,7 @@ export const TimelineItemSchema = z.object({
 export type TimelineItem = z.infer<typeof TimelineItemSchema>;
 
 export const DuplicateMatchSchema = z.object({
-  issueId: z.number(),
+  issueId: z.string(),
   publicId: z.string(),
   title: z.string(),
   similarityScore: z.number(),
@@ -123,7 +123,7 @@ export type Department = z.infer<typeof DepartmentSchema>;
 
 export const IssueReportSchema = z.object({
   id: z.string(),
-  issueId: z.number(),
+  issueId: z.string(),
   citizenName: z.string(),
   citizenPhone: z.string().optional(),
   description: z.string(),
@@ -145,7 +145,7 @@ export const CitizenVerificationSchema = z.object({
 export type CitizenVerification = z.infer<typeof CitizenVerificationSchema>;
 
 export const IssueSchema = z.object({
-  id: z.number(),
+  id: z.string(),
   publicId: z.string(),
   title: z.string(),
   description: z.string(),

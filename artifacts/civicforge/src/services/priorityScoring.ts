@@ -135,9 +135,9 @@ export function calculatePriorityScore(params: {
 
   // Determine categorical priority
   let priority: PriorityLevel = "MEDIUM";
-  if (totalScore >= 80) {
+  if (totalScore >= 85) {
     priority = "CRITICAL";
-  } else if (totalScore >= 65) {
+  } else if (totalScore >= 70) {
     priority = "HIGH";
   } else if (totalScore >= 45) {
     priority = "MEDIUM";
