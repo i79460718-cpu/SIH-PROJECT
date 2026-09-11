@@ -39,6 +39,8 @@ export function CivicShell({ children }: { children: ReactNode }) {
     { href: "/map", label: t("nav.map"), icon: MapPin },
     { href: "/ai-intelligence", label: t("nav.ai"), icon: Sparkles },
     { href: "/officer", label: t("nav.officer"), icon: HardHat },
+    { href: "/university", label: t("nav.university"), icon: Users },
+    { href: "/industry", label: t("nav.industry"), icon: Wrench },
   ];
 
   return (
@@ -58,17 +60,15 @@ export function CivicShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-[hsl(var(--background)/.8)]">
-            <span>
-              {t("top.today")} <strong className="text-white">{summary ? summary.reportsReceived : "..."}</strong> {t("top.received")}
-            </span>
-            <span className="hidden md:inline">
-              {t("top.merged")} <strong className="text-amber-300">{summary ? summary.duplicatesMerged : "..."}</strong> {t("top.duplicates")}
-            </span>
-            <span className="hidden lg:inline">
-              {t("top.spam")} <strong className="text-red-300">{summary ? summary.spamBlocked : "..."}</strong> {t("top.blocked")}
-            </span>
-
-            {/* Language Switcher */}
+            {summary ? (
+              <>
+                <span>{summary.openIssues} open</span>
+                <span className="hidden md:inline">{summary.resolutionRate}% resolved</span>
+                <span className="hidden lg:inline">{summary.activeOfficers} officers active</span>
+              </>
+            ) : (
+              <span className="opacity-60">Syncing live data…</span>
+            )}
             <LanguageSwitcher />
           </div>
         </div>

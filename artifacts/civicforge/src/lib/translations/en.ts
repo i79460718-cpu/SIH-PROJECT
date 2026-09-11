@@ -7,7 +7,8 @@ export const en: Record<string, string> = {
   "nav.ai": "AI Intelligence",
   "nav.officer": "Officer Portal",
   "nav.track": "Track Complaint",
-  "nav.language": "Regional Language",
+  "nav.university": "University Portal",
+  "nav.industry": "Industry Partnership",
 
   // Top Bar Notifications
   "top.ai_online": "AI Detection Online ●",
@@ -20,7 +21,7 @@ export const en: Record<string, string> = {
   "top.blocked": "blocked",
 
   // Footer
-  "footer.motto": "AI-Powered Civic Grievance Intelligence & Resolution Platform. Designed for the Smart India Hackathon to unify citizen reporting, duplicate detection, and transparent tri-party field resolution in Jharkhand.",
+  "footer.motto": "AI-powered societal challenge and innovation collaboration platform connecting communities, universities and industry to turn real-world problems into deployable solutions.",
   "footer.ai_status": "AI Engine: Active (Deterministic Fallback Ready)",
   "footer.portals": "Portals & Live Systems",
   "footer.citizen": "Citizen Action",

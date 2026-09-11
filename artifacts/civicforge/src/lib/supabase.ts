@@ -30,23 +30,8 @@ const normalizedUrl =
 
 export const supabase = createClient(normalizedUrl, key);
 
-// Verification query: Log [Supabase] Connected successfully only after a successful .from("issues").select("*").limit(1)
-(async () => {
-  try {
-    const { error } = await supabase
-      .from("issues")
-      .select("*")
-      .limit(1);
-
-    if (error) {
-      console.error("[Supabase] Connection test failed:", error.message, error);
-    } else {
-      console.log("[Supabase] Connected successfully");
-    }
-  } catch (err) {
-    console.error("[Supabase] Connection test network/parse error:", err);
-  }
-})();
+// Live queries run only when requested by real data consumers. Importing the
+// client must not issue a connectivity probe on an offline demo dashboard.
 
 // Demo Departments for Jharkhand
 export const DEMO_DEPARTMENTS: Department[] = [
@@ -905,7 +890,10 @@ export async function verifyIssueResolution(
  * Compute real-time dashboard analytics directly from Supabase
  */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-  const issues = await getIssues();
+  const [issues, officersResult] = await Promise.all([
+    getIssues(),
+    supabase.from("officers").select("id", { count: "exact", head: true }).eq("active", true),
+  ]);
 
   const reportsReceived = issues.reduce((acc, curr) => acc + (curr.reportCount || 1), 0);
   const duplicatesMerged = issues.reduce((acc, curr) => acc + (curr.duplicateCount || 0), 0);
@@ -920,17 +908,18 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
   const criticalIssues = issues.filter((i) => i.priority === "CRITICAL").length;
   const highIssues = issues.filter((i) => i.priority === "HIGH").length;
 
+  // Truthful aggregation — no hardcoded floor values. Zero is a valid state.
   return {
-    reportsReceived: Math.max(reportsReceived, 42),
-    duplicatesMerged: Math.max(duplicatesMerged, 18),
-    spamBlocked: 14,
-    resolvedToday: Math.max(resolvedToday, 5),
-    resolutionRate: Math.max(resolutionRate, 68),
-    openIssues: Math.max(openIssues, 6),
-    criticalIssues: Math.max(criticalIssues, 2),
-    highIssues: Math.max(highIssues, 3),
-    activeOfficers: DEMO_OFFICERS.length,
-    slaCompliance: 94.6,
+    reportsReceived,
+    duplicatesMerged,
+    spamBlocked: 0,
+    resolvedToday,
+    resolutionRate,
+    openIssues,
+    criticalIssues,
+    highIssues,
+    activeOfficers: officersResult.count || 0,
+    slaCompliance: 0,
   };
 }
 

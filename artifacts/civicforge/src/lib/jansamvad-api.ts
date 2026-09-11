@@ -20,6 +20,7 @@ import { detectCategory } from "../services/categoryDetection";
 import { findDuplicateCandidates } from "../services/duplicateDetection";
 import { calculatePriorityScore } from "../services/priorityScoring";
 import { routeToDepartment } from "../services/departmentRouting";
+import { getUniversities } from "../services/universityService";
 
 import type {
   CreateIssueInput,
@@ -43,6 +44,7 @@ export {
   verifyIssueResolution,
   getDashboardSummary,
   getOfficerAssignments,
+  getUniversities,
 };
 
 export type {
@@ -54,6 +56,28 @@ export type {
   Officer,
   SupportIssueInput,
 };
+
+export interface IndustryMetrics {
+  recommendedProjects: number;
+  activeCollaborations: number;
+  requestsPending: number;
+  testingSupports: number;
+  fundingActive: number;
+  impactRecorded: number;
+}
+
+export function useIndustryMetrics(industryPartnerId?: string) {
+  return useQuery<IndustryMetrics>({
+    queryKey: ["industry-metrics", industryPartnerId],
+    queryFn: async () => {
+      if (!industryPartnerId) return { recommendedProjects: 0, activeCollaborations: 0, requestsPending: 0, testingSupports: 0, fundingActive: 0, impactRecorded: 0 };
+      const response = await fetch(`/api/innovation/metrics/industry/${industryPartnerId}`);
+      if (!response.ok) throw new Error("Failed to fetch metrics");
+      return response.json();
+    },
+    enabled: Boolean(industryPartnerId),
+  });
+}
 
 export interface DashboardSummary {
   reportsReceived: number;

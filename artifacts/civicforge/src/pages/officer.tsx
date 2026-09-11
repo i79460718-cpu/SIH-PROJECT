@@ -65,20 +65,21 @@ export default function OfficerPage() {
     }
   };
 
-  // Handle Start Work / Reached Location
-  const handleStartWork = async (issueId: string | number) => {
+  // Handle Site Inspection
+  const handlePerformInspection = async (issueId: string | number) => {
     try {
       await updateStatusMutation.mutateAsync({
         issueId,
-        status: "Work Started",
-        comment: `Officer ${currentOfficer?.name} reached location and initiated repair work.`,
+        status: "Work Started", // Should ideally be a specific 'Inspection Completed' status
+        comment: `Officer ${currentOfficer?.name} performed site inspection. Observations recorded.`,
         actor: "Field Officer",
       });
       refetch();
     } catch (err) {
-      alert("Failed to start work.");
+      alert("Failed to record inspection.");
     }
   };
+
 
   // Handle Evidence Upload & Mark Awaiting Verification
   const handleSubmitEvidence = async () => {
@@ -235,11 +236,11 @@ export default function OfficerPage() {
                       {(task.status === "Accepted" || task.status === "Officer Assigned") && (
                         <button
                           type="button"
-                          onClick={() => handleStartWork(task.id)}
+                          onClick={() => handlePerformInspection(task.id)}
                           disabled={updateStatusMutation.isPending}
                           className="focus-ring inline-flex items-center gap-1.5 rounded-full bg-amber-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-amber-700"
                         >
-                          <HardHat size={13} />{t("officer.startWork")}</button>
+                          <HardHat size={13} />Perform Inspection</button>
                       )}
 
                       {task.status === "Work Started" && (

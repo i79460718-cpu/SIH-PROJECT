@@ -1101,6 +1101,11 @@ class IssueRepository {
     const now = new Date().toISOString();
     const timeStr = new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
 
+    // Auto-match officer
+    const assignedOfficer = this.officers
+      .filter(o => o.active !== false && o.department.toLowerCase().includes(analysis.department.toLowerCase()) && o.district.toLowerCase() === district.toLowerCase())
+      .sort((a, b) => a.activeTasks - b.activeTasks)[0];
+
     const evidenceList: Evidence[] = [];
     if (input.evidenceUrl) {
       evidenceList.push({
@@ -1140,6 +1145,18 @@ class IssueRepository {
       },
     ];
 
+    if (assignedOfficer) {
+        assignedOfficer.activeTasks += 1;
+        timeline.push({
+            id: `tl-${id}-4`,
+            time: timeStr,
+            date: "Today",
+            title: `Officer ${assignedOfficer.name} assigned`,
+            actor: "AI/System",
+            description: `Auto-assigned to ${assignedOfficer.name} (${assignedOfficer.badge}) based on workload optimization.`
+        });
+    }
+
     const newIssue: Issue = {
       id,
       publicId,
@@ -1153,11 +1170,12 @@ class IssueRepository {
       locationText: input.locationText,
       latitude: input.latitude || (district === "Jamshedpur" ? 22.8046 : district === "Dhanbad" ? 23.7957 : 23.3441),
       longitude: input.longitude || (district === "Jamshedpur" ? 86.2029 : district === "Dhanbad" ? 86.4304 : 85.3096),
-      status: "Routed",
+      status: assignedOfficer ? "Officer Assigned" : "Routed",
       priority: analysis.priority,
       priorityScore: analysis.priorityScore,
       severity: analysis.severity,
       department: analysis.department,
+      assignedOfficer: assignedOfficer,
       reportCount: 1,
       duplicateCount: 0,
       createdAt: now,

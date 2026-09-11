@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
+import { useDemoSession } from "./demo-session";
 
-export type UserRole = "citizen" | "officer" | "admin";
+export type UserRole = "citizen" | "officer" | "admin" | "university_admin" | "industry_partner";
 
 export interface UserProfile {
   id: string;
@@ -10,6 +11,8 @@ export interface UserProfile {
   full_name?: string;
   phone?: string;
   district?: string;
+  university_id?: string;
+  industry_partner_id?: string;
 }
 
 interface AuthContextType {
@@ -28,7 +31,36 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const VALID_ROLES: UserRole[] = ["citizen", "officer", "admin", "university_admin", "industry_partner"];
+
+/**
+ * Provision a missing linked demo entity once for an authenticated profile.  This
+ * makes the development seed usable after a database reset without asking a
+ * presenter to edit profile foreign keys by hand.  The update is persisted; it
+ * is never a client-only persona override.
+ */
+async function provisionPersonaLinkage(p: UserProfile): Promise<UserProfile> {
+  try {
+    const changes: Partial<UserProfile> = {};
+    if (p.role === "university_admin" && !p.university_id) {
+      const { data } = await supabase.from("universities").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
+      if (data?.id) changes.university_id = data.id as string;
+    }
+    if (p.role === "industry_partner" && !p.industry_partner_id) {
+      const { data } = await supabase.from("industry_partners").select("id").order("created_at", { ascending: true }).limit(1).maybeSingle();
+      if (data?.id) changes.industry_partner_id = data.id as string;
+    }
+    if (Object.keys(changes).length) {
+      const { data, error } = await supabase.from("profiles").update(changes).eq("id", p.id).select("*").single();
+      if (!error && data) return data as UserProfile;
+    }
+  } catch { /* ignore */ }
+  return p;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { demoSession } = useDemoSession();
+  const demoActive = Boolean(demoSession);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -36,78 +68,61 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [loginModalOpen, setLoginModalOpen] = useState(false);
 
-  // Fetch or infer profile from Supabase
   const loadProfile = async (currentUser: User | null) => {
     if (!currentUser) {
       setProfile(null);
       setRole("citizen");
       return;
     }
-
     try {
-      // 1. Check profiles table
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", currentUser.id)
-        .maybeSingle();
-
+      const { data, error } = await supabase.from("profiles").select("*").eq("id", currentUser.id).maybeSingle();
       if (!error && data) {
-        setProfile(data as UserProfile);
-        setRole(data.role as UserRole);
+        const enriched = await provisionPersonaLinkage(data as UserProfile);
+        setProfile(enriched);
+        setRole(enriched.role as UserRole);
         return;
       }
-
-      // 2. Check metadata or email conventions
-      const metaRole = (currentUser.user_metadata?.role as UserRole) ||
-        (currentUser.email?.includes("admin")
-          ? "admin"
-          : currentUser.email?.includes("officer")
-          ? "officer"
-          : "citizen");
-
-      const inferredProfile: UserProfile = {
+      const requestedRole = currentUser.user_metadata?.role;
+      const base: UserProfile = {
         id: currentUser.id,
-        role: metaRole,
+        role: VALID_ROLES.includes(requestedRole as UserRole) ? requestedRole as UserRole : "citizen",
         full_name: currentUser.user_metadata?.full_name || currentUser.email?.split("@")[0] || "Citizen Resident",
-        phone: currentUser.phone || undefined,
         district: "Ranchi",
       };
-
-      setProfile(inferredProfile);
-      setRole(metaRole);
+      const { data: created, error: createError } = await supabase
+        .from("profiles")
+        .insert(base)
+        .select("*")
+        .single();
+      const enriched = await provisionPersonaLinkage((!createError && created ? created : base) as UserProfile);
+      setProfile(enriched);
+      setRole(enriched.role as UserRole);
     } catch {
       setRole("citizen");
     }
   };
 
   useEffect(() => {
-    // Initial session load
+    // Demo sessions never hydrate or refresh real account data.
+    if (demoActive) { setIsLoading(false); return; }
+    let disposed = false;
     supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      if (disposed) return;
       setSession(currentSession);
       setUser(currentSession?.user ?? null);
       loadProfile(currentSession?.user ?? null).finally(() => setIsLoading(false));
     });
-
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (disposed) return;
       setSession(newSession);
       setUser(newSession?.user ?? null);
       loadProfile(newSession?.user ?? null);
     });
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, []);
+    return () => { disposed = true; subscription.unsubscribe(); };
+  }, [demoActive]);
 
   const signInWithPassword = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
     setSession(data.session);
     setUser(data.user);
@@ -130,62 +145,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setRole("citizen");
   };
 
-  // Demo helper for hackathon judges: effortlessly toggle between Citizen, Officer, Admin personas
   const switchDemoRole = async (targetRole: UserRole, officerName?: string) => {
-    if (targetRole === "citizen") {
-      setRole("citizen");
-      if (profile) {
-        setProfile({ ...profile, role: "citizen" });
-      }
-      return;
-    }
-
-    // Try signing in with demo email if exists
-    const demoEmail = targetRole === "admin" ? "admin@jansamvad.gov.in" : "officer.verma@jansamvad.gov.in";
-    const demoPassword = "Password123!@#";
-
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: demoEmail,
-        password: demoPassword,
-      });
-
-      if (!error && data?.user) {
-        setSession(data.session);
-        setUser(data.user);
-        await loadProfile(data.user);
-        return;
-      }
-    } catch {
-      // If auth user does not exist in Supabase auth yet, provide client persona preview
-    }
-
-    // Client-side persona state for immediate evaluation
-    setRole(targetRole);
-    setProfile({
-      id: user?.id || `demo-${targetRole}-uuid`,
-      role: targetRole,
-      full_name: officerName || (targetRole === "admin" ? "State Administrator (Ranchi HQ)" : "Ramesh Kumar Verma (Assistant Engineer)"),
-      district: "Ranchi",
-    });
+    // Roles are database-authorized.  A browser must never impersonate a role
+    // by changing React state; use a seeded account or an account provisioned
+    // with role metadata instead.
+    void targetRole;
+    void officerName;
+    throw new Error("Sign in with a provisioned account for this role. Role switching is not available in the browser.");
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        session,
-        profile,
-        role,
-        isLoading,
-        loginModalOpen,
-        setLoginModalOpen,
-        signInWithPassword,
-        signInAnonymously,
-        signOut,
-        switchDemoRole,
-      }}
-    >
+    <AuthContext.Provider value={{ user, session, profile, role, isLoading, loginModalOpen, setLoginModalOpen, signInWithPassword, signInAnonymously, signOut, switchDemoRole }}>
       {children}
     </AuthContext.Provider>
   );
@@ -193,8 +163,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 }

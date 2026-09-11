@@ -141,7 +141,7 @@ export default function Home() {
                     {t("home.reportsToday")}
                   </p>
                   <p className="display-font mt-1 text-2xl font-black text-[hsl(var(--foreground))]">
-                    {summary?.reportsReceived ? "1,284" : "1,284"}
+                    {summary?.reportsReceived ?? 0}
                   </p>
                   <p className="text-[10px] text-stone-500 mt-0.5">{t("metric.reportsReceived.sub")}</p>
                 </div>
@@ -151,7 +151,7 @@ export default function Home() {
                     {t("home.dupMerged")}
                   </p>
                   <p className="display-font mt-1 text-2xl font-black text-amber-700 dark:text-amber-400">
-                    318
+                    {summary?.duplicatesMerged ?? 0}
                   </p>
                   <p className="text-[10px] text-amber-800/80 dark:text-amber-300/80 mt-0.5">{t("metric.duplicatesMerged.sub")}</p>
                 </div>
@@ -161,7 +161,7 @@ export default function Home() {
                     {t("home.spamPrevented")}
                   </p>
                   <p className="display-font mt-1 text-2xl font-black text-red-600 dark:text-red-400">
-                    73
+                    {summary?.spamBlocked ?? 0}
                   </p>
                   <p className="text-[10px] text-red-700/80 dark:text-red-300/80 mt-0.5">{t("metric.spamBlocked.sub")}</p>
                 </div>
@@ -171,7 +171,7 @@ export default function Home() {
                     {t("home.issuesResolved")}
                   </p>
                   <p className="display-font mt-1 text-2xl font-black text-emerald-600 dark:text-emerald-400">
-                    186
+                    {summary?.resolvedToday ?? 0}
                   </p>
                   <p className="text-[10px] text-emerald-700/80 dark:text-emerald-300/80 mt-0.5">{t("metric.resolvedToday.sub")}</p>
                 </div>
@@ -181,11 +181,11 @@ export default function Home() {
               <div className="mt-5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-xs">
                 <div className="flex items-center justify-between text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">
                   <span>{t("metric.officersOnline")}</span>
-                  <span className="mono-font font-bold text-[hsl(var(--foreground))]">102 Active</span>
+                  <span className="mono-font font-bold text-[hsl(var(--foreground))]">{summary?.activeOfficers ?? 0} Active</span>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-[hsl(var(--muted-foreground))]">
                   <span>{t("metric.avgDispatch")}</span>
-                  <span className="mono-font font-bold text-emerald-600">24 mins</span>
+                  <span className="mono-font font-bold text-emerald-600">Live data</span>
                 </div>
               </div>
 
@@ -210,7 +210,7 @@ export default function Home() {
         <div className="mx-auto grid max-w-[1320px] grid-cols-2 gap-y-6 px-5 py-7 md:grid-cols-5 md:px-8">
           <div className="border-l px-4 first:border-l-0 border-[hsl(var(--primary))] md:px-6">
             <div className="display-font text-3xl font-extrabold tracking-[-.05em] text-[hsl(var(--primary))] md:text-4xl">
-              4,892
+              {summary?.reportsReceived ?? 0}
             </div>
             <div className="mono-font mt-1 text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] font-bold">
               {t("metric.reportsReceived")}
@@ -219,7 +219,7 @@ export default function Home() {
 
           <div className="border-l px-4 border-[hsl(var(--border))] md:px-6">
             <div className="display-font text-3xl font-extrabold tracking-[-.05em] text-amber-600 md:text-4xl">
-              1,429
+              {summary?.duplicatesMerged ?? 0}
             </div>
             <div className="mono-font mt-1 text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] font-bold">
               {t("metric.duplicatesMerged")}
@@ -228,7 +228,7 @@ export default function Home() {
 
           <div className="border-l px-4 border-[hsl(var(--border))] md:px-6">
             <div className="display-font text-3xl font-extrabold tracking-[-.05em] text-red-600 md:text-4xl">
-              412
+              {summary?.spamBlocked ?? 0}
             </div>
             <div className="mono-font mt-1 text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] font-bold">
               {t("metric.spamBlocked")}
@@ -237,7 +237,7 @@ export default function Home() {
 
           <div className="border-l px-4 border-[hsl(var(--border))] md:px-6">
             <div className="display-font text-3xl font-extrabold tracking-[-.05em] text-emerald-600 md:text-4xl">
-              186
+              {summary?.resolvedToday ?? 0}
             </div>
             <div className="mono-font mt-1 text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] font-bold">
               {t("metric.resolvedToday")}
@@ -246,7 +246,7 @@ export default function Home() {
 
           <div className="border-l px-4 border-[hsl(var(--border))] md:px-6">
             <div className="display-font text-3xl font-extrabold tracking-[-.05em] text-[hsl(var(--foreground))] md:text-4xl">
-              91.4%
+              {summary?.resolutionRate ?? 0}%
             </div>
             <div className="mono-font mt-1 text-[10px] uppercase tracking-[.12em] text-[hsl(var(--muted-foreground))] font-bold">
               {t("metric.resolutionRate")}

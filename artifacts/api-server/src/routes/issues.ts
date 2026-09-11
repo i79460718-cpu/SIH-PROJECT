@@ -50,6 +50,11 @@ router.post("/issues", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Invalid issue data", details: parseResult.error.format() });
       return;
     }
+    // Backend Mandatory Evidence Enforcement
+    if (!parseResult.data.evidenceUrl) {
+       res.status(400).json({ error: "Supporting evidence is mandatory." });
+       return;
+    }
     const issue = await issueRepository.createIssue(parseResult.data);
     res.status(201).json(issue);
   } catch (error) {

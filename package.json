@@ -11,6 +11,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace=@workspace/civicforge",
+    "provision:demo": "node scripts/provision-demo-users.mjs",
     "build": "npm run build --workspace=@workspace/civicforge",
     "typecheck:libs": "tsc --build",
     "typecheck": "npm run typecheck:libs && npm run typecheck --workspace=@workspace/civicforge",

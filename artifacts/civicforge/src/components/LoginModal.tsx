@@ -1,27 +1,27 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useAuth, type UserRole } from "../lib/auth-context";
-import { HardHat, ShieldCheck, User, Lock, Mail, AlertCircle, CheckCircle2, Sparkles } from "lucide-react";
+import { HardHat, ShieldCheck, User, Lock, Mail, AlertCircle, CheckCircle2, Building2, BriefcaseBusiness } from "lucide-react";
+import { useLocation } from "wouter";
+import { useDemoSession, demoDestinations, demoLabels } from "@/lib/demo-session";
 
 export function LoginModal() {
+  const [, setLocation] = useLocation();
   const {
     loginModalOpen,
     setLoginModalOpen,
     role,
     user,
-    profile,
-    signInWithPassword,
-    signInAnonymously,
     signOut,
-    switchDemoRole,
   } = useAuth();
+  const { demoSession, startDemoSession, endDemoSession } = useDemoSession();
 
-  const [activeTab, setActiveTab] = useState<UserRole>("officer");
-  const [email, setEmail] = useState("officer.verma@jansamvad.gov.in");
-  const [password, setPassword] = useState("Password123!@#");
+  const [activeTab, setActiveTab] = useState<UserRole>("citizen");
+  const [email, setEmail] = useState("citizen@jansamvad.gov.in");
+  const [password, setPassword] = useState("JansamvadDemo@2026!");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -32,15 +32,21 @@ export function LoginModal() {
     setSuccessMsg(null);
     if (newRole === "admin") {
       setEmail("admin@jansamvad.gov.in");
-      setPassword("Password123!@#");
     } else if (newRole === "officer") {
-      setEmail("officer.verma@jansamvad.gov.in");
-      setPassword("Password123!@#");
+      setEmail("officer@jansamvad.gov.in");
+    } else if (newRole === "university_admin") {
+      setEmail("university@jansamvad.gov.in");
+    } else if (newRole === "industry_partner") {
+      setEmail("industry@jansamvad.gov.in");
     } else {
-      setEmail("citizen.ranchi@gmail.com");
-      setPassword("Password123!@#");
+      setEmail("citizen@jansamvad.gov.in");
     }
+    setPassword("JansamvadDemo@2026!");
   };
+
+  useEffect(() => {
+    if (loginModalOpen) handleTabChange(demoSession?.role ?? "citizen");
+  }, [loginModalOpen]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,35 +55,16 @@ export function LoginModal() {
     setSuccessMsg(null);
 
     try {
-      if (activeTab === "citizen" && !email) {
-        await signInAnonymously();
-        setSuccessMsg("Signed in as Citizen resident.");
-      } else {
-        await signInWithPassword(email, password);
-        setSuccessMsg(`Signed in successfully as ${activeTab}.`);
-      }
-      setTimeout(() => {
-        setLoginModalOpen(false);
-      }, 900);
+      // Credentials are display-only conveniences, never sent to Auth or an API.
+      startDemoSession(activeTab);
+      setSuccessMsg(`Demo session active — ${demoLabels[activeTab]}`);
+      setLoginModalOpen(false);
+      setLocation(demoDestinations[activeTab]);
     } catch (err: any) {
-      // If Supabase Auth account isn't yet provisioned in auth.users, allow smooth persona switch for hackathon evaluation
-      console.warn("[Auth Login] Live auth notice:", err?.message);
-      await switchDemoRole(activeTab);
-      setSuccessMsg(`Active persona switched to ${activeTab.toUpperCase()} for evaluation.`);
-      setTimeout(() => {
-        setLoginModalOpen(false);
-      }, 900);
+      setErrorMsg(err?.message || "Could not start the local demo session.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleQuickPersona = async (targetRole: UserRole) => {
-    await switchDemoRole(targetRole);
-    setSuccessMsg(`Role switched to ${targetRole.toUpperCase()}`);
-    setTimeout(() => {
-      setLoginModalOpen(false);
-    }, 600);
   };
 
   return (
@@ -85,23 +72,20 @@ export function LoginModal() {
       <DialogContent className="sm:max-w-[460px] border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
         <DialogHeader>
           <div className="flex items-center gap-2">
-            <span className="mono-font rounded bg-[hsl(var(--primary)/.15)] px-2 py-0.5 text-[11px] font-bold text-[hsl(var(--primary))] uppercase">
-              GOVERNMENT OF JHARKHAND
-            </span>
             <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
-              Tri-Party Portal Auth
+              Societal Innovation Ecosystem
             </span>
           </div>
           <DialogTitle className="display-font text-2xl font-bold text-[hsl(var(--foreground))] mt-1">
             Access Portal & Roles
           </DialogTitle>
           <DialogDescription className="text-xs text-[hsl(var(--muted-foreground))]">
-            Sign in with official credentials or switch roles to test the tri-party resolution loop.
+            Sign in to a local demo workspace instantly. No real account or password verification is required. Changes stay in this browser tab.
           </DialogDescription>
         </DialogHeader>
 
         {/* Role Tabs */}
-        <div className="grid grid-cols-3 gap-1 rounded-xl bg-[hsl(var(--muted))] p-1 text-xs">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-1 rounded-xl bg-[hsl(var(--muted))] p-1 text-xs">
           <button
             type="button"
             onClick={() => handleTabChange("citizen")}
@@ -138,19 +122,22 @@ export function LoginModal() {
             <ShieldCheck size={14} />
             Admin
           </button>
+          <button type="button" onClick={() => handleTabChange("university_admin")} className={`flex items-center justify-center gap-1.5 rounded-lg py-2 font-bold transition-all ${activeTab === "university_admin" ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}><Building2 size={14} />University</button>
+          <button type="button" onClick={() => handleTabChange("industry_partner")} className={`flex items-center justify-center gap-1.5 rounded-lg py-2 font-bold transition-all ${activeTab === "industry_partner" ? "bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm" : "text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"}`}><BriefcaseBusiness size={14} />Industry</button>
         </div>
 
         {/* Current Role Banner */}
         {role && (
           <div className="flex items-center justify-between rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--muted)/.5)] px-3 py-2 text-xs">
             <span className="text-[hsl(var(--muted-foreground))]">
-              Current Active Role:{" "}
-              <strong className="text-[hsl(var(--foreground))] uppercase">{role}</strong>
+              Selected Demo Role:{" "}
+              <strong className="text-[hsl(var(--foreground))] uppercase">{activeTab === "admin" ? "ADMIN / SUPER_ADMIN" : activeTab.toUpperCase()}</strong>
+              {demoSession ? <span className="block mt-1">Active demo: <strong>{demoLabels[demoSession.role]}</strong></span> : user && <span className="block mt-1">Real account: <strong>{role}</strong></span>}
             </span>
-            {role !== "citizen" && (
+            {(demoSession || user) && (
               <button
                 type="button"
-                onClick={signOut}
+                onClick={() => { if (demoSession) { endDemoSession(); setLocation("/"); } else { void signOut(); } }}
                 className="text-xs font-semibold text-rose-600 hover:underline"
               >
                 Sign Out
@@ -173,10 +160,14 @@ export function LoginModal() {
           </div>
         )}
 
-        {/* Credentials Form */}
-        <form onSubmit={handleLogin} className="space-y-3 pt-1">
+        <Button type="button" variant="outline" className="w-full font-bold" onClick={() => {
+          setLoginModalOpen(false);
+          setLocation(`/demo/${activeTab}`);
+        }}>Open {activeTab.replaceAll("_", " ")} demo preview</Button>
+        <p className="text-xs text-[hsl(var(--muted-foreground))]">Preview is read-only. Sign in below to use the interactive DEMO / TEST workspace.</p>
+        <form onSubmit={handleLogin} noValidate className="space-y-3 pt-1">
           <div className="space-y-1">
-            <Label className="text-xs font-semibold">Official Email / ID</Label>
+            <Label className="text-xs font-semibold">Demo account email</Label>
             <div className="relative">
               <Mail size={14} className="absolute left-3 top-3 text-[hsl(var(--muted-foreground))]" />
               <Input
@@ -190,14 +181,14 @@ export function LoginModal() {
                     ? "admin@jansamvad.gov.in"
                     : activeTab === "officer"
                     ? "officer@jansamvad.gov.in"
-                    : "citizen@example.com"
+                    : activeTab === "university_admin" ? "university@jansamvad.gov.in" : activeTab === "industry_partner" ? "industry@jansamvad.gov.in" : "citizen@jansamvad.gov.in"
                 }
               />
             </div>
           </div>
 
           <div className="space-y-1">
-            <Label className="text-xs font-semibold">Security Password</Label>
+            <Label className="text-xs font-semibold">Demo password</Label>
             <div className="relative">
               <Lock size={14} className="absolute left-3 top-3 text-[hsl(var(--muted-foreground))]" />
               <Input
@@ -216,46 +207,10 @@ export function LoginModal() {
             disabled={loading}
             className="w-full font-bold bg-[hsl(var(--primary))] text-white shadow-md hover:bg-[hsl(var(--primary)/.9)]"
           >
-            {loading ? "Authenticating..." : `Sign in as ${activeTab.toUpperCase()}`}
+            {loading ? "Starting demo..." : `Sign in as ${activeTab.replaceAll("_", " ").toUpperCase()}`}
           </Button>
         </form>
 
-        {/* Hackathon Quick Switcher */}
-        <div className="mt-2 border-t border-[hsl(var(--border))] pt-3">
-          <div className="flex items-center gap-1 text-[11px] font-bold text-[hsl(var(--muted-foreground))] uppercase">
-            <Sparkles size={12} className="text-amber-500" />
-            Hackathon Testing Switcher:
-          </div>
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickPersona("citizen")}
-              className="text-xs font-semibold"
-            >
-              Citizen Mode
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickPersona("officer")}
-              className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-            >
-              Field Officer
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickPersona("admin")}
-              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700"
-            >
-              Admin Lead
-            </Button>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );

@@ -21,6 +21,7 @@ import {
 import { useAnalyseReport, useCreateIssue, useSupportIssue, type AnalyseReportResponse } from "../lib/jansamvad-api";
 import { DuplicateMatchCard } from "../components/DuplicateMatchCard";
 import { AiAnalysisPanel } from "../components/AiAnalysisPanel";
+import { VoiceInput } from "../components/VoiceInput";
 
 const PRESET_PROMPTS = [
   {
@@ -59,7 +60,6 @@ export default function ReportPage() {
   const [urgency, setUrgency] = useState<"Normal" | "Urgent" | "Emergency">("Normal");
   const [photoUrl, setPhotoUrl] = useState<string>("");
   const [isLocating, setIsLocating] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
 
   // AI Pipeline Step State
   const [analysisStep, setAnalysisStep] = useState<number>(0);
@@ -91,18 +91,8 @@ export default function ReportPage() {
     }
   };
 
-  // Simulate Voice Dictation
-  const handleVoiceToggle = () => {
-    if (isRecording) {
-      setIsRecording(false);
-    } else {
-      setIsRecording(true);
-      setTimeout(() => {
-        setDescription("DAV school ke samne road par bada khadda hai aur pani bhara hua hai.");
-        setIsRecording(false);
-      }, 2200);
-    }
-  };
+  // Voice Dictation
+  // Handled by VoiceInput component
 
   // Simulate Image Upload
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -120,6 +110,11 @@ export default function ReportPage() {
   const handleAnalyse = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) return;
+
+    if (!photoUrl) {
+      alert("Supporting evidence (photo or video) is required to submit a challenge.");
+      return;
+    }
 
     setIsAnalysing(true);
     setAnalysisStep(1);
@@ -249,16 +244,7 @@ export default function ReportPage() {
               <label htmlFor="description" className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--foreground))]">
                 {t("report.descriptionLabel")} <span className="text-red-500">*</span>
               </label>
-              <button
-                type="button"
-                onClick={handleVoiceToggle}
-                className={`flex items-center gap-1 text-xs font-bold ${
-                  isRecording ? "text-red-600 animate-pulse" : "text-[hsl(var(--primary))] hover:underline"
-                }`}
-              >
-                <Mic size={14} />
-                {isRecording ? "Listening (बोलें)..." : "Voice Input (हिन्दी/Hinglish)"}
-              </button>
+              <VoiceInput onTranscript={(text) => setDescription(prev => prev + " " + text)} />
             </div>
             <textarea
               id="description"
@@ -343,16 +329,19 @@ export default function ReportPage() {
 
           {/* Photo Evidence Upload with local preview */}
           <div>
-            <label className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--foreground))]">
-              Photo Evidence (Optional)
+            <label className="text-xs font-bold uppercase tracking-wider text-[hsl(var(--foreground))] text-red-600">
+              Supporting Evidence Required <span className="text-red-500">*</span>
             </label>
+            <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1 mb-2">
+              Attach evidence of the reported problem to help verify the challenge and reduce false or misleading reports.
+            </p>
             <div className="mt-2 flex items-center gap-4">
               <label className="flex cursor-pointer items-center gap-2 rounded-xl border-2 border-dashed border-[hsl(var(--border))] bg-[hsl(var(--muted)/.3)] px-5 py-3.5 text-xs font-bold text-[hsl(var(--foreground))] hover:border-[hsl(var(--primary))] hover:bg-[hsl(var(--muted))]">
                 <Camera size={16} className="text-[hsl(var(--primary))]" />
-                <span>{t("report.upload")}</span>
+                <span>Upload Photo / Video / Document</span>
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,video/*,.pdf"
                   onChange={handleImageChange}
                   className="hidden"
                 />
@@ -370,7 +359,7 @@ export default function ReportPage() {
                 </div>
               ) : (
                 <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                  {t("report.photoHint")}
+                  Required for submission
                 </span>
               )}
             </div>
